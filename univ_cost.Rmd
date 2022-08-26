@@ -1,0 +1,162 @@
+---
+title: "University Cost Assessment"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+#knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+
+# Create a path to the CSV file
+dir <- paste0(dirname(rstudioapi::getActiveDocumentContext()$path), "/")
+path <- paste0(dir, "college_cost_2020.csv")
+# Read in CSV file. 
+# (Markdown assumes working directory is same as current file)
+student_score <- read_csv("college_cost_2020.csv")
+
+```
+
+The document directory is `r dir`.
+The document path is `r path`.
+
+```{r}
+# Check size of data set
+dim(college_cost)     # Returns [1] 2893  10
+```
+
+
+```{r}
+## Data Clean Up
+## Several universities did not report in 2020.
+## Observations where either the cost or graduation rate
+## is missing need to be removed from the data set.
+
+# First remove blank costs for instate
+college_cost <- subset(college_cost,
+                       subset = (!is.na(college_cost$cost_instate_offcamp)))
+# And blank costs for out of state
+college_cost <- subset(college_cost,
+                       subset = (!is.na(college_cost$cost_outstate_offcamp)))
+# Now remove blank graduation rates
+college_cost <- subset(college_cost,
+                       subset = (!is.na(college_cost$grad_rate_total)))
+# Check size of data set again
+dim(college_cost)     # Returns [1] 2144  10
+
+```
+
+
+```{r}
+## Question 5
+## Summary Statistics
+
+# The summary() function obtains minimum, maximum, mean, & N
+summary(college_cost)
+
+# Obtain standard deviation for numerical variables
+sd(college_cost$grad_rate_total)
+sd(college_cost$percent_admit_total, na.rm = TRUE)
+sd(college_cost$cost_instate_offcamp)
+sd(college_cost$cost_outstate_offcamp)
+sd(college_cost$sat_reading_25th, na.rm = TRUE)
+sd(college_cost$sat_math_25th, na.rm = TRUE)
+
+```
+
+```{r}
+## Questions 6 & 7
+## Histogram showing values of the graduation rate
+#par(mfrow = c(1, 1))
+
+hist(college_cost$grad_rate_total, freq = FALSE, ylim = c(0, 0.02),
+     breaks = 20, xlab = "Percentage of Students Graduating",
+     main = "Distribution of Graduation Rates across Universities, 2020")
+abline(v = mean(college_cost$grad_rate_total), col = "blue", lty = 2, lwd = 2)
+text(paste("Mean: ", format(mean(college_cost$grad_rate_total), digits = 6)), x = 60, y = 0.020)
+# Create a line for the default standard normal curve
+x <- seq(from = 0, to = 100, by = 1)
+lines(x, dnorm(x, mean = mean(x), sd = sd(x)), lty = 3)     # overlay the normal density curve
+
+
+```
+
+```{r}
+## Questions 8 & 9
+## Histogram of Out of State Tuition.
+## This time freq = TRUE to plot the number of universities for each bin.
+hist(college_cost$cost_outstate_offcamp, freq = TRUE,
+     ylim = c(0, 350), xlim = c(0, 90000), breaks = 20,
+     xlab = "Annual Tuition for Out of State Students", ylab = "# of Universities",
+     main = "Distribution Out of State Tuitions across Universities, 2020")
+abline(v = mean(college_cost$cost_outstate_offcamp), col = "blue", lty = 2, lwd = 2)
+text(paste("Mean: ", format(mean(college_cost$cost_outstate_offcamp), digits = 6)), x = 45000, y = 330)
+
+
+```
+
+```{r}
+## Questions 10 & 11
+## Bivariate relationship between Graduation Rates and Out-of-State Tuition.
+
+# Convert the independent variable (out of state tuition)
+# and the dependent variable (graduation rate) to z-scores
+# to more appropriately compare the two sets of values.
+z.grad.rate <- scale(college_cost$grad_rate_total)
+z.tuition <- scale(college_cost$cost_outstate_offcamp)
+
+# Scatter Plot comparing Out of State Tuition (x-axis)
+# to the Graduation Rate (y-axis)
+plot(z.tuition, z.grad.rate,
+     xlab = "Standardized Tuition Rates (Out-of-State)",
+     ylab = "Standardized Graduation Rates",
+     main = "Comparison of Trends in University\nGraduation Rates to Tuition Rates (2020)",
+     pch=20, col="blue")
+
+# Q-Q Plot to check correlation
+qqplot(z.tuition, z.grad.rate,   # Reference 2
+       main = "Quantile-Quantile for Standardized Tuition/Graduation",
+       xlab = "Tuition", ylab = "Graduation")
+abline(0, 1, col = "blue", lty = "dashed")
+
+```
+
+```{r}
+## Question 12
+
+## Bivariate regression model
+lm.bi <- lm(college_cost$grad_rate_total ~ college_cost$cost_outstate_offcamp)
+summary(lm.bi)
+
+## Multivariate regression model
+## The following control variables will be used
+## percent_admit_total    # lower admission rates indicate higher demand university
+## cost_instate_offcamp   # private universities often charge the same for in state
+                          # and out of state, and a public university may attract more
+                          # in state students
+## institution_size       # size of university and classes may have impact on students
+                          # remaining in school and finishing.
+
+# institution_size is a character variable that needs to be turned into a factor,
+# and the factor interpreted as numeric values to support the linear model.
+
+# Order the levels from smalles to largest
+inst.sizes <- c("Under 1,000", "1,000 - 4,999", "5,000 - 9,999", "10,000 - 19,999", "20,000 and above")
+# Reassign the institution_size variable as a factor
+college_cost$institution_size <- factor(college_cost$institution_size, levels = inst.sizes)
+levels(college_cost$institution_size)     # validate we have the levels in the right order
+
+# Create a new variable based on the numeric values of the factor
+college_cost$inst_size_numeric <- as.numeric(college_cost$institution_size)
+# At this point, we have a variable where 1 = smallest university and 5 = largest
+
+# Perform the multivariate analysis
+lm.multi <- lm(formula = grad_rate_total ~ cost_outstate_offcamp + 
+                       cost_instate_offcamp + percent_admit_total +
+                       inst_size_numeric, data = college_cost)
+summary(lm.multi)
+
+
+```
+
+
